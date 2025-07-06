@@ -1,519 +1,587 @@
-import React, { useState, useEffect, useRef } from 'react';
-import * as Tone from 'tone'; // Import Tone.js for audio feedback
-
-// Function to determine contrasting text color (black or white) for icons
-const getContrastTextColor = (hexColor) => {
-    const r = parseInt(hexColor.substring(1, 3), 16);
-    const g = parseInt(hexColor.substring(3, 5), 16);
-    const b = parseInt(hexColor.substring(5, 7), 16);
-    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-    return luminance > 0.5 ? '#000000' : '#FFFFFF';
-};
-
-// Function to determine contrasting stroke color (black or white) for shapes
-const getContrastStrokeColor = (hexColor) => {
-    const r = parseInt(hexColor.substring(1, 3), 16);
-    const g = parseInt(hexColor.substring(3, 5), 16);
-    const b = parseInt(hexColor.substring(5, 7), 16);
-    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-    return luminance > 0.5 ? '#000000' : '#FFFFFF'; // Use black for light backgrounds, white for dark
-};
-
-// Define common geometric shapes with their SVG paths
-// Each function now returns a complete SVG string, with a dynamically determined stroke for visibility
-const shapes = [
-    { name: 'circle', chinese: '圓形', svg: (color, strokeColor) => `<circle cx="50" cy="50" r="40" fill="${color}" stroke="${strokeColor}" stroke-width="2" />` },
-    { name: 'square', chinese: '正方形', svg: (color, strokeColor) => `<rect x="10" y="10" width="80" height="80" fill="${color}" stroke="${strokeColor}" stroke-width="2" />` },
-    { name: 'triangle', chinese: '三角形', svg: (color, strokeColor) => `<path d="M50 10 L90 90 H10 Z" fill="${color}" stroke="${strokeColor}" stroke-width="2" />` },
-    { name: 'star', chinese: '星星', svg: (color, strokeColor) => `<polygon points="50,10 61,35 90,35 68,55 79,80 50,65 21,80 32,55 10,35 39,35" fill="${color}" stroke="${strokeColor}" stroke-width="2" /></svg>` },
-    { name: 'heart', chinese: '愛心', svg: (color, strokeColor) => `<path d="M50 85 C20 60 20 20 50 20 C80 20 80 60 50 85 Z" fill="${color}" stroke="${strokeColor}" stroke-width="2" /></svg>` },
-    { name: 'oval', chinese: '橢圓形', svg: (color, strokeColor) => `<ellipse cx="50" cy="50" rx="45" ry="30" fill="${color}" stroke="${strokeColor}" stroke-width="2" />` },
-    { name: 'hexagon', chinese: '六邊形', svg: (color, strokeColor) => `<polygon points="50,5 95,30 95,70 50,95 5,70 5,30" fill="${color}" stroke="${strokeColor}" stroke-width="2" />` },
-    { name: 'pentagon', chinese: '五邊形', svg: (color, strokeColor) => `<polygon points="50,10 90,40 75,90 25,90 10,40" fill="${color}" stroke="${strokeColor}" stroke-width="2" />` },
-    { name: 'diamond', chinese: '菱形', svg: (color, strokeColor) => `<polygon points="50,5 95,50 50,95 5,50" fill="${color}" stroke="${strokeColor}" stroke-width="2" />` },
-    { name: 'crescent', chinese: '新月形', svg: (color, strokeColor) => `<path d="M50 10 C70 10 80 30 80 50 C80 70 70 90 50 90 C30 90 20 70 20 50 C20 30 30 10 50 10 Z M50 20 C40 20 35 30 35 50 C35 70 40 80 50 80 C60 80 65 70 65 50 C65 30 60 20 50 20 Z" fill="${color}" stroke="${strokeColor}" stroke-width="2" />` }
-];
-
-
-// Main App Component
-const App = () => {
-    // Colors array
-    const colors = [
-        { name: 'Red', chinese: '紅色', hex: '#EF4444' },
-        { name: 'Blue', chinese: '藍色', hex: '#3B82F6' },
-        { name: 'Green', chinese: '綠色', hex: '#22C55E' },
-        { name: 'Yellow', chinese: '黃色', hex: '#FACC15' },
-        { name: 'Purple', chinese: '紫色', hex: '#A855F7' },
-        { name: 'Orange', chinese: '橙色', hex: '#F97316' },
-        { name: 'Pink', chinese: '粉紅色', hex: '#EC4899' },
-        { name: 'Black', chinese: '黑色', hex: '#000000' },
-        { name: 'White', chinese: '白色', hex: '#FFFFFF' },
-        { name: 'Brown', chinese: '棕色', hex: '#8B5F2A' },
-        { name: 'Gray', chinese: '灰色', hex: '#6B7280' },
-        { name: 'Cyan', chinese: '青色', hex: '#06B6D4' },
-        { name: 'Beige', chinese: '米色', hex: '#F5F5DC' },
-        { name: 'Olive', chinese: '橄欖綠', hex: '#808000' },
-        { name: 'Navy', chinese: '海軍藍', hex: '#000080' },
-        { name: 'Gold', chinese: '金色', hex: '#FFD700' },
-        { name: 'Silver', chinese: '銀色', hex: '#C0C0C0' },
-        { name: 'Teal', chinese: '青綠色', hex: '#008080' },
-        { name: 'Maroon', chinese: '褐紅色', hex: '#800000' },
-        { name: 'Indigo', chinese: '靛藍色', hex: '#4B0082' },
-        { name: 'Lime', chinese: '淺綠色', hex: '#A3E635' },
-        { name: 'Turquoise', chinese: '綠松石色', hex: '#20C997' },
-        { name: 'Lavender', chinese: '薰衣草色', hex: '#B57EDC' },
-        { name: 'Crimson', chinese: '深紅色', hex: '#DC143C' },
-        { name: 'OrangeRed', chinese: '橙紅色', hex: '#FF4500' },
-        { name: 'DarkGreen', chinese: '深綠色', hex: '#006400' },
-        { name: 'SkyBlue', chinese: '天藍色', hex: '#87CEEB' },
-        { name: 'Violet', chinese: '紫羅蘭色', hex: '#EE82EE' },
-        { name: 'OliveGreen', chinese: '橄欖綠色', hex: '#6B8E23' },
-        { name: 'DarkGray', chinese: '深灰色', hex: '#A9A9A9' },
-        { name: 'LightBlue', chinese: '淺藍色', hex: '#ADD8E6' },
-        { name: 'DarkRed', chinese: '暗紅色', hex: '#8B0000' },
-        { name: 'LightGreen', chinese: '淺綠色', hex: '#90EE90' },
-        { name: 'Aqua', chinese: '水綠色', hex: '#00FFFF' }
-    ];
-
-    const [currentColor, setCurrentColor] = useState(null); // The color to guess (the correct answer)
-    const [currentShape, setCurrentShape] = useState(null); // The shape for the current question (used for options)
-    const [options, setOptions] = useState([]); // The clickable color options
-    const [feedback, setFeedback] = useState(''); // Feedback message (Correct! / Try again!)
-    const [isCorrect, setIsCorrect] = useState(null); // True, False, or null
-    const [score, setScore] = useState(0); // Single player score
-    const [player1Score, setPlayer1Score] = useState(0); // Player 1 score in battle mode
-    const [player2Score, setPlayer2Score] = useState(0); // Player 2 score in battle mode
-    const [round, setRound] = useState(1);
-    const maxRounds = 10;
-    const [isBattleMode, setIsBattleMode] = useState(false); // State to toggle battle mode
-    const [currentPlayer, setCurrentPlayer] = useState('player1'); // Current player in battle mode
-
-    // New states for game flow and player names
-    const [gameStarted, setGameStarted] = useState(false); // Controls if game UI is shown
-    const [showNameInput, setShowNameInput] = useState(false); // Controls if name input is shown
-    const [player1Name, setPlayer1Name] = useState('玩家1');
-    const [player2Name, setPlayer2Name] = useState('玩家2');
-    const [nameInputError, setNameInputError] = useState(''); // New state for name input error
-
-    const synth = useRef(null); // Ref for Tone.js synth
-    const speechSynth = useRef(window.speechSynthesis); // Ref for Web Speech API
-
-    useEffect(() => {
-        // Initialize Tone.js synth only once
-        if (!synth.current) {
-            synth.current = new Tone.Synth().toDestination();
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keep Learning! 英文顏色學習遊戲</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter font for better typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
         }
-        if (gameStarted) {
-            console.log('Game Started. Starting new round.');
-            startNewRound();
+        /* Styling for SVG containers (main question area - no longer displays shape) */
+        .svg-container {
+            width: 150px;
+            height: 150px;
+            margin: 0 auto 1rem; /* Centered with bottom margin */
+            border-radius: 0.5rem; /* rounded-lg */
+            background-color: #f3f4f6; /* Light gray background to ensure contrast for white shapes */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); /* Subtle shadow */
         }
-    }, [gameStarted, isBattleMode]); // Re-initiate round when game starts or mode changes
-
-    // Function to speak the English text
-    const speakText = (text, lang = 'en-US') => { // Added lang parameter for flexibility
-        if (speechSynth.current) {
-            // Stop any ongoing speech before starting a new one
-            speechSynth.current.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = lang;
-            speechSynth.current.speak(utterance);
+        .svg-container svg {
+            width: 90%; /* Make SVG slightly smaller than container to allow for shadow */
+            height: 90%;
+            display: block;
+            object-fit: contain;
         }
-    };
-
-    // Function to start a new game round
-    const startNewRound = () => {
-        setFeedback('');
-        setIsCorrect(null);
-
-        // Select a random target color and target shape for the question
-        const targetColor = colors[Math.floor(Math.random() * colors.length)];
-        const targetShape = shapes[Math.floor(Math.random() * shapes.length)];
-
-        setCurrentColor(targetColor); // This is the correct color
-        setCurrentShape(targetShape); // This is the correct shape for the question
-
-        // Construct the question text: "What is this [color name] [shape name]?"
-        const questionText = `What is this ${targetColor.name.toLowerCase()} ${targetShape.name}?`;
-        speakText(questionText);
-        console.log('Question:', questionText);
-
-        // Prepare options: each option will have a color and a shape
-        let optionCandidates = [];
-        // Add the correct answer as a {color, shape} pair
-        optionCandidates.push({ color: targetColor, shape: targetShape });
-
-        // Generate 3 other unique incorrect options (color and shape can vary)
-        while (optionCandidates.length < 4) {
-            const randomColor = colors[Math.floor(Math.random() * colors.length)];
-            const randomShape = shapes[Math.floor(Math.random() * shapes.length)]; // Each option gets a random shape
-
-            // Check if this color-shape combination is already in options
-            const isDuplicate = optionCandidates.some(
-                opt => opt.color.name === randomColor.name && opt.shape.name === randomShape.name
-            );
-
-            if (!isDuplicate) {
-                optionCandidates.push({ color: randomColor, shape: randomShape });
-            }
+        /* Styling for option buttons' SVG containers */
+        .option-svg-container {
+            width: 80px; /* Smaller size for options */
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 8px; /* Space between shape and pronunciation buttons */
         }
-
-        // Shuffle the option candidates
-        for (let i = optionCandidates.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [optionCandidates[i], optionCandidates[j]] = [optionCandidates[j], optionCandidates[i]];
+        .option-svg-container svg {
+            width: 90%; /* Make SVG slightly smaller than container */
+            height: 90%;
         }
-        setOptions(optionCandidates); // Set options as an array of {color, shape} objects
-    };
-
-    // Handle user's color selection
-    const handleColorSelect = (selectedOption) => { // Renamed parameter to selectedOption
-        console.log('--- Handle Color Select ---');
-        console.log('Current Round:', round);
-        console.log('Current Player:', currentPlayer);
-        console.log('Target Color:', currentColor.name);
-        console.log('Target Shape:', currentShape.name);
-        console.log('Selected Color:', selectedOption.color.name);
-        console.log('Selected Shape:', selectedOption.shape.name);
-
-        let correct = false;
-        // Check if both color and shape match the target
-        if (selectedOption.color.name === currentColor.name && selectedOption.shape.name === currentShape.name) {
-            setFeedback('正確！');
-            setIsCorrect(true);
-            correct = true;
-            synth.current.triggerAttackRelease('C5', '8n'); // Play a positive sound
-            console.log('Answer: Correct!');
-        } else {
-            setFeedback(`再試一次！您選擇的是：${selectedOption.color.chinese} ${selectedOption.shape.chinese}`);
-            setIsCorrect(false);
-            synth.current.triggerAttackRelease('C3', '8n'); // Play a negative sound
-            console.log('Answer: Incorrect.');
+        /* Added padding to the option buttons to make space for the shape and icons */
+        .option-button-padding {
+            padding-top: 0.5rem; /* Adjust as needed */
+            padding-bottom: 0.5rem; /* Adjust as needed */
         }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
 
-        if (isBattleMode) {
-            // Log scores BEFORE update
-            console.log(`Scores BEFORE update: P1=${player1Score}, P2=${player2Score}`);
-            if (correct) {
-                if (currentPlayer === 'player1') {
-                    setPlayer1Score(prevScore => {
-                        console.log(`Player 1 score updated from ${prevScore} to ${prevScore + 1}`);
-                        return prevScore + 1;
-                    });
-                } else {
-                    setPlayer2Score(prevScore => {
-                        console.log(`Player 2 score updated from ${prevScore} to ${prevScore + 1}`);
-                        return prevScore + 1;
-                    });
+    <!-- React CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for JSX transformation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Tone.js for audio feedback -->
+    <script src="https://unpkg.com/tone"></script>
+
+    <script type="text/babel">
+        // Function to determine contrasting text color (black or white) for icons
+        const getContrastTextColor = (hexColor) => {
+            const r = parseInt(hexColor.substring(1, 3), 16);
+            const g = parseInt(hexColor.substring(3, 5), 16);
+            const b = parseInt(hexColor.substring(5, 7), 16);
+            const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            return luminance > 0.5 ? '#000000' : '#FFFFFF';
+        };
+
+        // Function to determine contrasting stroke color (black or white) for shapes
+        const getContrastStrokeColor = (hexColor) => {
+            const r = parseInt(hexColor.substring(1, 3), 16);
+            const g = parseInt(hexColor.substring(3, 5), 16);
+            const b = parseInt(hexColor.substring(5, 7), 16);
+            const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            return luminance > 0.5 ? '#000000' : '#FFFFFF'; // Use black for light backgrounds, white for dark
+        };
+
+        // Define common geometric shapes with their SVG paths
+        // Each function now returns a complete SVG string, with a dynamically determined stroke for visibility
+        const shapes = [
+            { name: 'circle', chinese: '圓形', svg: (color, strokeColor) => `<circle cx="50" cy="50" r="40" fill="${color}" stroke="${strokeColor}" stroke-width="2" />` },
+            { name: 'square', chinese: '正方形', svg: (color, strokeColor) => `<rect x="10" y="10" width="80" height="80" fill="${color}" stroke="${strokeColor}" stroke-width="2" />` },
+            { name: 'triangle', chinese: '三角形', svg: (color, strokeColor) => `<path d="M50 10 L90 90 H10 Z" fill="${color}" stroke="${strokeColor}" stroke-width="2" />` },
+            { name: 'star', chinese: '星星', svg: (color, strokeColor) => `<polygon points="50,10 61,35 90,35 68,55 79,80 50,65 21,80 32,55 10,35 39,35" fill="${color}" stroke="${strokeColor}" stroke-width="2" /></svg>` },
+            { name: 'heart', chinese: '愛心', svg: (color, strokeColor) => `<path d="M50 85 C20 60 20 20 50 20 C80 20 80 60 50 85 Z" fill="${color}" stroke="${strokeColor}" stroke-width="2" /></svg>` },
+            { name: 'oval', chinese: '橢圓形', svg: (color, strokeColor) => `<ellipse cx="50" cy="50" rx="45" ry="30" fill="${color}" stroke="${strokeColor}" stroke-width="2" />` },
+            { name: 'hexagon', chinese: '六邊形', svg: (color, strokeColor) => `<polygon points="50,5 95,30 95,70 50,95 5,70 5,30" fill="${color}" stroke="${strokeColor}" stroke-width="2" />` },
+            { name: 'pentagon', chinese: '五邊形', svg: (color, strokeColor) => `<polygon points="50,10 90,40 75,90 25,90 10,40" fill="${color}" stroke="${strokeColor}" stroke-width="2" />` },
+            { name: 'diamond', chinese: '菱形', svg: (color, strokeColor) => `<polygon points="50,5 95,50 50,95 5,50" fill="${color}" stroke="${strokeColor}" stroke-width="2" />` },
+            { name: 'crescent', chinese: '新月形', svg: (color, strokeColor) => `<path d="M50 10 C70 10 80 30 80 50 C80 70 70 90 50 90 C30 90 20 70 20 50 C20 30 30 10 50 10 Z M50 20 C40 20 35 30 35 50 C35 70 40 80 50 80 C60 80 65 70 65 50 C65 30 60 20 50 20 Z" fill="${color}" stroke="${strokeColor}" stroke-width="2" />` }
+        ];
+
+
+        // Main App Component
+        const App = () => {
+            // Colors array
+            const colors = [
+                { name: 'Red', chinese: '紅色', hex: '#EF4444' },
+                { name: 'Blue', chinese: '藍色', hex: '#3B82F6' },
+                { name: 'Green', chinese: '綠色', hex: '#22C55E' },
+                { name: 'Yellow', chinese: '黃色', hex: '#FACC15' },
+                { name: 'Purple', chinese: '紫色', hex: '#A855F7' },
+                { name: 'Orange', chinese: '橙色', hex: '#F97316' },
+                { name: 'Pink', chinese: '粉紅色', hex: '#EC4899' },
+                { name: 'Black', chinese: '黑色', hex: '#000000' },
+                { name: 'White', chinese: '白色', hex: '#FFFFFF' },
+                { name: 'Brown', chinese: '棕色', hex: '#8B5F2A' },
+                { name: 'Gray', chinese: '灰色', hex: '#6B7280' },
+                { name: 'Cyan', chinese: '青色', hex: '#06B6D4' },
+                { name: 'Beige', chinese: '米色', hex: '#F5F5DC' },
+                { name: 'Olive', chinese: '橄欖綠', hex: '#808000' },
+                { name: 'Navy', chinese: '海軍藍', hex: '#000080' },
+                { name: 'Gold', chinese: '金色', hex: '#FFD700' },
+                { name: 'Silver', chinese: '銀色', hex: '#C0C0C0' },
+                { name: 'Teal', chinese: '青綠色', hex: '#008080' },
+                { name: 'Maroon', chinese: '褐紅色', hex: '#800000' },
+                { name: 'Indigo', chinese: '靛藍色', hex: '#4B0082' },
+                { name: 'Lime', chinese: '淺綠色', hex: '#A3E635' },
+                { name: 'Turquoise', chinese: '綠松石色', hex: '#20C997' },
+                { name: 'Lavender', chinese: '薰衣草色', hex: '#B57EDC' },
+                { name: 'Crimson', chinese: '深紅色', hex: '#DC143C' },
+                { name: 'OrangeRed', chinese: '橙紅色', hex: '#FF4500' },
+                { name: 'DarkGreen', chinese: '深綠色', hex: '#006400' },
+                { name: 'SkyBlue', chinese: '天藍色', hex: '#87CEEB' },
+                { name: 'Violet', chinese: '紫羅蘭色', hex: '#EE82EE' },
+                { name: 'OliveGreen', chinese: '橄欖綠色', hex: '#6B8E23' },
+                { name: 'DarkGray', chinese: '深灰色', hex: '#A9A9A9' },
+                { name: 'LightBlue', chinese: '淺藍色', hex: '#ADD8E6' },
+                { name: 'DarkRed', chinese: '暗紅色', hex: '#8B0000' },
+                { name: 'LightGreen', chinese: '淺綠色', hex: '#90EE90' },
+                { name: 'Aqua', chinese: '水綠色', hex: '#00FFFF' }
+            ];
+
+            const [currentColor, setCurrentColor] = React.useState(null); // The color to guess (the correct answer)
+            const [currentShape, setCurrentShape] = React.useState(null); // The shape for the current question (used for options)
+            const [options, setOptions] = React.useState([]); // The clickable color options
+            const [feedback, setFeedback] = React.useState(''); // Feedback message (Correct! / Try again!)
+            const [isCorrect, setIsCorrect] = React.useState(null); // True, False, or null
+            const [score, setScore] = React.useState(0); // Single player score
+            const [player1Score, setPlayer1Score] = React.useState(0); // Player 1 score in battle mode
+            const [player2Score, setPlayer2Score] = React.useState(0); // Player 2 score in battle mode
+            const [round, setRound] = React.useState(1);
+            const maxRounds = 10;
+            const [isBattleMode, setIsBattleMode] = React.useState(false); // State to toggle battle mode
+            const [currentPlayer, setCurrentPlayer] = React.useState('player1'); // Current player in battle mode
+
+            // New states for game flow and player names
+            const [gameStarted, setGameStarted] = React.useState(false); // Controls if game UI is shown
+            const [showNameInput, setShowNameInput] = React.useState(false); // Controls if name input is shown
+            const [player1Name, setPlayer1Name] = React.useState('玩家1');
+            const [player2Name, setPlayer2Name] = React.useState('玩家2');
+            const [nameInputError, setNameInputError] = React.useState(''); // New state for name input error
+
+            const synth = React.useRef(null); // Ref for Tone.js synth
+            const speechSynth = React.useRef(window.speechSynthesis); // Ref for Web Speech API
+
+            React.useEffect(() => {
+                // Initialize Tone.js synth only once
+                if (!synth.current) {
+                    synth.current = new Tone.Synth().toDestination();
                 }
-            }
-            // Log next player
-            const nextPlayer = currentPlayer === 'player1' ? 'player2' : 'player1';
-            setCurrentPlayer(nextPlayer);
-            console.log('Next Player:', nextPlayer);
-        } else {
-            if (correct) {
-                setScore(prevScore => {
-                    console.log(`Single player score updated from ${prevScore} to ${prevScore + 1}`);
-                    return prevScore + 1;
-                });
-            }
-        }
+                if (gameStarted) {
+                    console.log('Game Started. Starting new round.');
+                    startNewRound();
+                }
+            }, [gameStarted, isBattleMode]); // Re-initiate round when game starts or mode changes
 
-        // Move to next round after a short delay
-        setTimeout(() => {
-            console.log('Moving to next round/game over...');
-            if (round < maxRounds) {
-                setRound(prevRound => prevRound + 1);
-                startNewRound();
-            } else {
-                // Game over logic
-                let finalMessage = '';
-                let currentP1Score = player1Score; // Capture current state for this closure
-                let currentP2Score = player2Score; // Capture current state for this closure
-                let currentSingleScore = score; // Capture current state for single player
+            // Function to speak the English text
+            const speakText = (text, lang = 'en-US') => { // Added lang parameter for flexibility
+                if (speechSynth.current) {
+                    // Stop any ongoing speech before starting a new one
+                    speechSynth.current.cancel();
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.lang = lang;
+                    speechSynth.current.speak(utterance);
+                }
+            };
 
-                // Adjust scores for the *last* correct answer if it happened in this turn
-                // This is crucial because setState is async and player1Score/player2Score
-                // inside this closure might not reflect the increment yet.
-                if (correct) { // 'correct' flag is from the outer scope, which is fine
-                    if (isBattleMode) {
-                        if (currentPlayer === 'player1') { // 'currentPlayer' is also from the outer scope
-                            currentP1Score += 1;
-                        } else {
-                            currentP2Score += 1;
-                        }
-                    } else {
-                        currentSingleScore += 1;
+            // Function to start a new game round
+            const startNewRound = () => {
+                setFeedback('');
+                setIsCorrect(null);
+
+                // Select a random target color and target shape for the question
+                const targetColor = colors[Math.floor(Math.random() * colors.length)];
+                const targetShape = shapes[Math.floor(Math.random() * shapes.length)];
+
+                setCurrentColor(targetColor); // This is the correct color
+                setCurrentShape(targetShape); // This is the correct shape for the question
+
+                // Construct the question text: "What is this [color name] [shape name]?"
+                const questionText = `What is this ${targetColor.name.toLowerCase()} ${targetShape.name}?`;
+                speakText(questionText);
+                console.log('Question:', questionText);
+
+                // Prepare options: each option will have a color and a shape
+                let optionCandidates = [];
+                // Add the correct answer as a {color, shape} pair
+                optionCandidates.push({ color: targetColor, shape: targetShape });
+
+                // Generate 3 other unique incorrect options (color and shape can vary)
+                while (optionCandidates.length < 4) {
+                    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+                    const randomShape = shapes[Math.floor(Math.random() * shapes.length)]; // Each option gets a random shape
+
+                    // Check if this color-shape combination is already in options
+                    const isDuplicate = optionCandidates.some(
+                        opt => opt.color.name === randomColor.name && opt.shape.name === randomShape.name
+                    );
+
+                    if (!isDuplicate) {
+                        optionCandidates.push({ color: randomColor, shape: randomShape });
                     }
+                }
+
+                // Shuffle the option candidates
+                for (let i = optionCandidates.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [optionCandidates[i], optionCandidates[j]] = [optionCandidates[j], optionCandidates[i]];
+                }
+                setOptions(optionCandidates); // Set options as an array of {color, shape} objects
+            };
+
+            // Handle user's color selection
+            const handleColorSelect = (selectedOption) => { // Renamed parameter to selectedOption
+                console.log('--- Handle Color Select ---');
+                console.log('Current Round:', round);
+                console.log('Current Player:', currentPlayer);
+                console.log('Target Color:', currentColor.name);
+                console.log('Target Shape:', currentShape.name);
+                console.log('Selected Color:', selectedOption.color.name);
+                console.log('Selected Shape:', selectedOption.shape.name);
+
+                let correct = false;
+                // Check if both color and shape match the target
+                if (selectedOption.color.name === currentColor.name && selectedOption.shape.name === currentShape.name) {
+                    setFeedback('正確！');
+                    setIsCorrect(true);
+                    correct = true;
+                    synth.current.triggerAttackRelease('C5', '8n'); // Play a positive sound
+                    console.log('Answer: Correct!');
+                } else {
+                    setFeedback(`再試一次！您選擇的是：${selectedOption.color.chinese} ${selectedOption.shape.chinese}`);
+                    setIsCorrect(false);
+                    synth.current.triggerAttackRelease('C3', '8n'); // Play a negative sound
+                    console.log('Answer: Incorrect.');
                 }
 
                 if (isBattleMode) {
-                    if (currentP1Score > currentP2Score) {
-                        finalMessage = `${player1Name} 獲勝！分數：${currentP1Score} - ${currentP2Score}`;
-                    } else if (currentP2Score > currentP1Score) {
-                        finalMessage = `${player2Name} 獲勝！分數：${currentP2Score} - ${currentP1Score}`;
-                    } else {
-                        finalMessage = `平手！分數：${currentP1Score} - ${currentP2Score}`;
+                    // Log scores BEFORE update
+                    console.log(`Scores BEFORE update: P1=${player1Score}, P2=${player2Score}`);
+                    if (correct) {
+                        if (currentPlayer === 'player1') {
+                            setPlayer1Score(prevScore => {
+                                console.log(`Player 1 score updated from ${prevScore} to ${prevScore + 1}`);
+                                return prevScore + 1;
+                            });
+                        } else {
+                            setPlayer2Score(prevScore => {
+                                console.log(`Player 2 score updated from ${prevScore} to ${prevScore + 1}`);
+                                return prevScore + 1;
+                            });
+                        }
                     }
+                    // Log next player
+                    const nextPlayer = currentPlayer === 'player1' ? 'player2' : 'player1';
+                    setCurrentPlayer(nextPlayer);
+                    console.log('Next Player:', nextPlayer);
                 } else {
-                    finalMessage = `遊戲結束！您的分數是 ${currentSingleScore} / ${maxRounds}`;
+                    if (correct) {
+                        setScore(prevScore => {
+                            console.log(`Single player score updated from ${prevScore} to ${prevScore + 1}`);
+                            return prevScore + 1;
+                        });
+                    }
                 }
-                setFeedback(finalMessage);
-                setIsCorrect(null); // Reset feedback state
-                setCurrentColor(null); // Hide the word
-                setOptions([]); // Hide options
+
+                // Move to next round after a short delay
+                setTimeout(() => {
+                    console.log('Moving to next round/game over...');
+                    if (round < maxRounds) {
+                        setRound(prevRound => prevRound + 1);
+                        startNewRound();
+                    } else {
+                        // Game over logic
+                        let finalMessage = '';
+                        let currentP1Score = player1Score; // Capture current state for this closure
+                        let currentP2Score = player2Score; // Capture current state for this closure
+                        let currentSingleScore = score; // Capture current state for single player
+
+                        // Adjust scores for the *last* correct answer if it happened in this turn
+                        // This is crucial because setState is async and player1Score/player2Score
+                        // inside this closure might not reflect the increment yet.
+                        if (correct) { // 'correct' flag is from the outer scope, which is fine
+                            if (isBattleMode) {
+                                if (currentPlayer === 'player1') { // 'currentPlayer' is also from the outer scope
+                                    currentP1Score += 1;
+                                } else {
+                                    currentP2Score += 1;
+                                }
+                            } else {
+                                currentSingleScore += 1;
+                            }
+                        }
+
+                        if (isBattleMode) {
+                            if (currentP1Score > currentP2Score) {
+                                finalMessage = `${player1Name} 獲勝！分數：${currentP1Score} - ${currentP2Score}`;
+                            } else if (currentP2Score > currentP1Score) {
+                                finalMessage = `${player2Name} 獲勝！分數：${currentP2Score} - ${currentP1Score}`;
+                            } else {
+                                finalMessage = `平手！分數：${currentP1Score} - ${currentP2Score}`;
+                            }
+                        } else {
+                            finalMessage = `遊戲結束！您的分數是 ${currentSingleScore} / ${maxRounds}`;
+                        }
+                        setFeedback(finalMessage);
+                        setIsCorrect(null); // Reset feedback state
+                        setCurrentColor(null); // Hide the word
+                        setOptions([]); // Hide options
+                        setCurrentShape(null); // Clear the shape
+                        console.log('Game Over. Final Feedback:', finalMessage);
+                    }
+                }, 2000); // 2 second delay to see the answer
+            };
+
+            // Reset the game to initial state (back to mode selection)
+            const resetGameToStart = () => {
+                setScore(0);
+                setPlayer1Score(0);
+                setPlayer2Score(0);
+                setRound(1);
+                setCurrentPlayer('player1');
+                setGameStarted(false);
+                setShowNameInput(false);
+                setFeedback(''); // Clear any game over feedback
+                setCurrentColor(null); // Ensure current color is reset
+                setOptions([]); // Ensure options are cleared
+                setNameInputError(''); // Clear name input error
                 setCurrentShape(null); // Clear the shape
-                console.log('Game Over. Final Feedback:', finalMessage);
+                console.log('Game reset to start screen.');
+            };
+
+            // Handle mode selection from start screen
+            const handleModeSelect = (mode) => {
+                if (mode === 'single') {
+                    setIsBattleMode(false);
+                    setGameStarted(true);
+                    setShowNameInput(false);
+                    setNameInputError(''); // Clear error if switching from name input
+                    console.log('Selected Single Player Mode.');
+                } else { // Battle mode
+                    setIsBattleMode(true);
+                    setShowNameInput(true); // Show name input fields
+                    console.log('Selected Battle Mode. Showing name input.');
+                }
+            };
+
+            // Handle starting battle mode game after names are entered
+            const handleStartBattleGame = () => {
+                if (player1Name.trim() === '' || player2Name.trim() === '') {
+                    setNameInputError('請輸入兩位玩家的名稱！');
+                    console.log('Name input error: Names are empty.');
+                    return;
+                }
+                setNameInputError(''); // Clear error if valid
+                setGameStarted(true);
+                setShowNameInput(false);
+                console.log(`Starting Battle Game with P1: ${player1Name}, P2: ${player2Name}`);
+            };
+
+            // --- Render Logic ---
+
+            // Initial Screen: Mode Selection and Name Input
+            if (!gameStarted) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-300 to-purple-400 p-4 font-inter">
+                        <div className="bg-white p-8 rounded-xl shadow-2xl text-center max-w-md w-full">
+                            <h2 className="text-4xl font-bold text-gray-800 mb-6">選擇遊戲模式</h2>
+                            {!showNameInput ? (
+                                <div className="flex flex-col space-y-4">
+                                    <button
+                                        onClick={() => handleModeSelect('single')}
+                                        className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-8 rounded-full shadow-lg transform transition duration-300 hover:scale-105"
+                                    >
+                                        單人模式
+                                    </button>
+                                    <button
+                                        onClick={() => handleModeSelect('battle')}
+                                        className="bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-8 rounded-full shadow-lg transform transition duration-300 hover:scale-105"
+                                    >
+                                        對戰模式
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col space-y-6">
+                                    <input
+                                        type="text"
+                                        placeholder="玩家1 名稱"
+                                        value={player1Name}
+                                        onChange={(e) => setPlayer1Name(e.target.value)}
+                                        className="p-3 border-2 border-gray-300 rounded-lg text-xl focus:outline-none focus:border-blue-500"
+                                    />
+                                    <input
+                                        type="text"
+                                        placeholder="玩家2 名稱"
+                                        value={player2Name}
+                                        onChange={(e) => setPlayer2Name(e.target.value)}
+                                        className="p-3 border-2 border-gray-300 rounded-lg text-xl focus:outline-none focus:border-blue-500"
+                                    />
+                                    {nameInputError && (
+                                        <p className="text-red-500 text-base font-medium -mt-4">{nameInputError}</p>
+                                    )}
+                                    <button
+                                        onClick={handleStartBattleGame}
+                                        className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-4 px-8 rounded-full shadow-lg transform transition duration-300 hover:scale-105"
+                                    >
+                                        開始遊戲
+                                    </button>
+                                    <button
+                                        onClick={resetGameToStart} // Go back to mode selection
+                                        className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-3 px-6 rounded-full shadow-lg transform transition duration-300 hover:scale-105"
+                                    >
+                                        返回
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
             }
-        }, 2000); // 2 second delay to see the answer
-    };
 
-    // Reset the game to initial state (back to mode selection)
-    const resetGameToStart = () => {
-        setScore(0);
-        setPlayer1Score(0);
-        setPlayer2Score(0);
-        setRound(1);
-        setCurrentPlayer('player1');
-        setGameStarted(false);
-        setShowNameInput(false);
-        setFeedback(''); // Clear any game over feedback
-        setCurrentColor(null); // Ensure current color is reset
-        setOptions([]); // Ensure options are cleared
-        setNameInputError(''); // Clear name input error
-        setCurrentShape(null); // Clear the shape
-        console.log('Game reset to start screen.');
-    };
+            // Game Over Screen
+            if (!currentColor && round > maxRounds) {
+                let finalScoreDisplay = '';
+                if (isBattleMode) {
+                    finalScoreDisplay = (
+                        <p className="text-3xl text-gray-700 mb-8">
+                            {player1Name} 分數: <span className="font-extrabold text-blue-600">{player1Score}</span><br />
+                            {player2Name} 分數: <span className="font-extrabold text-blue-600">{player2Score}</span>
+                        </p>
+                    );
+                } else {
+                    finalScoreDisplay = (
+                        <p className="text-3xl text-gray-700 mb-8">您的分數是 <span className="font-extrabold text-blue-600">{score}</span> / {maxRounds}</p>
+                    );
+                }
 
-    // Handle mode selection from start screen
-    const handleModeSelect = (mode) => {
-        if (mode === 'single') {
-            setIsBattleMode(false);
-            setGameStarted(true);
-            setShowNameInput(false);
-            setNameInputError(''); // Clear error if switching from name input
-            console.log('Selected Single Player Mode.');
-        } else { // Battle mode
-            setIsBattleMode(true);
-            setShowNameInput(true); // Show name input fields
-            console.log('Selected Battle Mode. Showing name input.');
-        }
-    };
-
-    // Handle starting battle mode game after names are entered
-    const handleStartBattleGame = () => {
-        if (player1Name.trim() === '' || player2Name.trim() === '') {
-            setNameInputError('請輸入兩位玩家的名稱！');
-            console.log('Name input error: Names are empty.');
-            return;
-        }
-        setNameInputError(''); // Clear error if valid
-        setGameStarted(true);
-        setShowNameInput(false);
-        console.log(`Starting Battle Game with P1: ${player1Name}, P2: ${player2Name}`);
-    };
-
-    // --- Render Logic ---
-
-    // Initial Screen: Mode Selection and Name Input
-    if (!gameStarted) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-300 to-purple-400 p-4 font-inter">
-                <div className="bg-white p-8 rounded-xl shadow-2xl text-center max-w-md w-full">
-                    <h2 className="text-4xl font-bold text-gray-800 mb-6">選擇遊戲模式</h2>
-                    {!showNameInput ? (
-                        <div className="flex flex-col space-y-4">
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-300 to-purple-400 p-4 font-inter">
+                        <div className="bg-white p-8 rounded-xl shadow-2xl text-center max-w-md w-full">
+                            <h2 className="text-4xl font-bold text-gray-800 mb-6">遊戲結束！</h2>
+                            {finalScoreDisplay}
+                            <p className="text-3xl font-bold text-gray-800 mb-6">{feedback}</p> {/* Display winner message */}
                             <button
-                                onClick={() => handleModeSelect('single')}
-                                className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-8 rounded-full shadow-lg transform transition duration-300 hover:scale-105"
-                            >
-                                單人模式
-                            </button>
-                            <button
-                                onClick={() => handleModeSelect('battle')}
+                                onClick={resetGameToStart}
                                 className="bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-8 rounded-full shadow-lg transform transition duration-300 hover:scale-105"
                             >
-                                對戰模式
+                                再玩一次
                             </button>
                         </div>
-                    ) : (
-                        <div className="flex flex-col space-y-6">
-                            <input
-                                type="text"
-                                placeholder="玩家1 名稱"
-                                value={player1Name}
-                                onChange={(e) => setPlayer1Name(e.target.value)}
-                                className="p-3 border-2 border-gray-300 rounded-lg text-xl focus:outline-none focus:border-blue-500"
-                            />
-                            <input
-                                type="text"
-                                placeholder="玩家2 名稱"
-                                value={player2Name}
-                                onChange={(e) => setPlayer2Name(e.target.value)}
-                                className="p-3 border-2 border-gray-300 rounded-lg text-xl focus:outline-none focus:border-blue-500"
-                            />
-                            {nameInputError && (
-                                <p className="text-red-500 text-base font-medium -mt-4">{nameInputError}</p>
+                    </div>
+                );
+            }
+
+            // Main Game Screen
+            return (
+                <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-300 to-purple-400 p-4 font-inter">
+                    {/* Wrap the two main children in a React Fragment */}
+                    <>
+                        <div className="bg-white p-8 rounded-xl shadow-2xl text-center max-w-2xl w-full mb-8">
+                            <h1 className="text-5xl font-extrabold text-blue-700 mb-4">Keep Learning!</h1>
+                            <p className="text-2xl text-gray-600 mb-6">回合：{round} / {maxRounds}</p>
+
+                            {isBattleMode ? (
+                                <div className="mb-4 text-2xl font-bold text-gray-700">
+                                    <p>{player1Name} 分數: <span className="text-blue-600">{player1Score}</span></p>
+                                    <p>{player2Name} 分數: <span className="text-red-600">{player2Score}</span></p>
+                                    <p className={`mt-2 ${currentPlayer === 'player1' ? 'text-blue-700' : 'text-red-700'} animate-pulse`}>
+                                        目前是 {currentPlayer === 'player1' ? player1Name : player2Name} 的回合！
+                                    </p>
+                                </div>
+                            ) : (
+                                <p className="text-2xl text-gray-600 mb-6">分數：{score}</p>
                             )}
-                            <button
-                                onClick={handleStartBattleGame}
-                                className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-4 px-8 rounded-full shadow-lg transform transition duration-300 hover:scale-105"
-                            >
-                                開始遊戲
-                            </button>
-                            <button
-                                onClick={resetGameToStart} // Go back to mode selection
-                                className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-3 px-6 rounded-full shadow-lg transform transition duration-300 hover:scale-105"
-                            >
-                                返回
-                            </button>
+
+                            {currentColor && currentShape && (
+                                <div className="mb-10">
+                                    {/* Question: "What is this [color name] [shape name]?" */}
+                                    <p className="text-6xl font-black text-gray-800 animate-pulse">
+                                        What is this {currentColor.name.toLowerCase()} {currentShape.name}?
+                                    </p>
+                                    {/* Removed the display of the shape filled with the target color from the question area */}
+                                    {/* The shape will now only appear in the options */}
+
+                                    <button
+                                        onClick={() => speakText(`What is this ${currentColor.name.toLowerCase()} ${currentShape.name}?`)}
+                                        className="mt-4 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-full shadow-lg transform transition duration-300 hover:scale-105"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1V9a1 1 0 011-1h1.586l4.707-4.707C10.923 3.682 11.5 4.107 11.5 5v14c0 .893-.577 1.318-1.207.793L5.586 15z" />
+                                        </svg>
+                                        聽發音
+                                    </button>
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 mb-8">
+                                {options.map((option, index) => ( // Iterate over option objects
+                                    <button
+                                        key={index}
+                                        onClick={() => handleColorSelect(option)} // Pass the whole option object
+                                        className="w-full h-32 rounded-2xl flex flex-col items-center justify-center border-4 border-gray-300 hover:border-blue-500 transition duration-300 transform hover:scale-105 shadow-md relative" // Removed option-button-padding
+                                        style={{ backgroundColor: option.color.hex }} // Set button background to option's color
+                                    >
+                                        {/* Display the shape filled with the option's color */}
+                                        {option.shape && ( // Use option.shape here
+                                            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="w-20 h-20 mb-2"> {/* Added w-20 h-20 and mb-2 */}
+                                                <g dangerouslySetInnerHTML={{ __html: option.shape.svg(option.color.hex, getContrastStrokeColor(option.color.hex)) }} />
+                                            </svg>
+                                        )}
+
+                                        {/* English Speaker icon - bottom right */}
+                                        <div
+                                            onClick={(e) => {
+                                                e.stopPropagation(); // Prevent triggering parent button's onClick
+                                                // Speak both English color and shape names
+                                                speakText(`${option.color.name} ${option.shape.name}`, 'en-US');
+                                            }}
+                                            className="absolute bottom-2 right-2 p-1 rounded-full bg-black bg-opacity-30 hover:bg-opacity-50 transition-opacity cursor-pointer" // Added cursor-pointer
+                                            style={{ color: getContrastTextColor(option.color.hex) }} // Use option's color for contrast
+                                            aria-label={`Listen to ${option.color.name} ${option.shape.name} pronunciation`}
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fillRule="evenodd" d="M9.383 3.023A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l4.707-4.707a1 1 0 012.09-.27zM14.01 7.071a.75.75 0 00-.01 1.05L15.393 10l-1.403 1.879a.75.75 0 101.06 1.06L16.45 11.01a.75.75 0 000-1.06L15.07 7.07a.75.75 0 00-1.06-.001z" clipRule="evenodd" />
+                                            </svg>
+                                        </div>
+
+                                        {/* Chinese Speaker icon - bottom left */}
+                                        <div
+                                            onClick={(e) => {
+                                                e.stopPropagation(); // Prevent triggering parent button's onClick
+                                                // Speak both Chinese color and shape names
+                                                speakText(`${option.color.chinese} ${option.shape.chinese}`, 'zh-TW');
+                                            }}
+                                            className="absolute bottom-2 left-2 p-1 rounded-full bg-black bg-opacity-30 hover:bg-opacity-50 transition-opacity cursor-pointer" // Added cursor-pointer
+                                            style={{ color: getContrastTextColor(option.color.hex) }}
+                                            aria-label={`Listen to ${option.color.chinese} ${option.shape.chinese} pronunciation`}
+                                        >
+                                            {/* Using a different icon to distinguish Chinese pronunciation */}
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                                                <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
+                                            </svg>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+
+                            {feedback && (
+                                <p className={`text-4xl font-bold ${isCorrect ? 'text-green-600' : 'text-red-600'} animate-bounce`}>
+                                    {feedback}
+                                </p>
+                            )}
                         </div>
-                    )}
-                </div>
-            </div>
-        );
-    }
 
-    // Game Over Screen
-    if (!currentColor && round > maxRounds) {
-        let finalScoreDisplay = '';
-        if (isBattleMode) {
-            finalScoreDisplay = (
-                <p className="text-3xl text-gray-700 mb-8">
-                    {player1Name} 分數: <span className="font-extrabold text-blue-600">{player1Score}</span><br />
-                    {player2Name} 分數: <span className="font-extrabold text-blue-600">{player2Score}</span>
-                </p>
-            );
-        } else {
-            finalScoreDisplay = (
-                <p className="text-3xl text-gray-700 mb-8">您的分數是 <span className="font-extrabold text-blue-600">{score}</span> / {maxRounds}</p>
-            );
-        }
-
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-300 to-purple-400 p-4 font-inter">
-                <div className="bg-white p-8 rounded-xl shadow-2xl text-center max-w-md w-full">
-                    <h2 className="text-4xl font-bold text-gray-800 mb-6">遊戲結束！</h2>
-                    {finalScoreDisplay}
-                    <p className="text-3xl font-bold text-gray-800 mb-6">{feedback}</p> {/* Display winner message */}
-                    <button
-                        onClick={resetGameToStart}
-                        className="bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-8 rounded-full shadow-lg transform transition duration-300 hover:scale-105"
-                    >
-                        再玩一次
-                    </button>
-                </div>
-            </div>
-        );
-    }
-
-    // Main Game Screen
-    return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-300 to-purple-400 p-4 font-inter">
-            <div className="bg-white p-8 rounded-xl shadow-2xl text-center max-w-2xl w-full mb-8">
-                <h1 className="text-5xl font-extrabold text-blue-700 mb-4">Keep Learning!</h1>
-                <p className="text-2xl text-gray-600 mb-6">回合：{round} / {maxRounds}</p>
-
-                {isBattleMode ? (
-                    <div className="mb-4 text-2xl font-bold text-gray-700">
-                        <p>{player1Name} 分數: <span className="text-blue-600">{player1Score}</span></p>
-                        <p>{player2Name} 分數: <span className="text-red-600">{player2Score}</span></p>
-                        <p className={`mt-2 ${currentPlayer === 'player1' ? 'text-blue-700' : 'text-red-700'} animate-pulse`}>
-                            目前是 {currentPlayer === 'player1' ? player1Name : player2Name} 的回合！
-                        </p>
-                    </div>
-                ) : (
-                    <p className="text-2xl text-gray-600 mb-6">分數：{score}</p>
-                )}
-
-                {currentColor && currentShape && (
-                    <div className="mb-10">
-                        {/* Question: "What is this [color name] [shape name]?" */}
-                        <p className="text-6xl font-black text-gray-800 animate-pulse">
-                            What is this {currentColor.name.toLowerCase()} {currentShape.name}?
-                        </p>
-                        {/* Removed the display of the shape filled with the target color from the question area */}
-                        {/* The shape will now only appear in the options */}
-
+                        {/* Button to return to start screen */}
                         <button
-                            onClick={() => speakText(`What is this ${currentColor.name.toLowerCase()} ${currentShape.name}?`)}
-                            className="mt-4 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-full shadow-lg transform transition duration-300 hover:scale-105"
+                            onClick={resetGameToStart}
+                            className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-full shadow-lg transform transition duration-300 hover:scale-105 mt-4"
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1V9a1 1 0 011-1h1.586l4.707-4.707C10.923 3.682 11.5 4.107 11.5 5v14c0 .893-.577 1.318-1.207.793L5.586 15z" />
-                            </svg>
-                            聽發音
+                            返回主選單
                         </button>
-                    </div>
-                )}
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 mb-8">
-                    {options.map((option, index) => ( // Iterate over option objects
-                        <button
-                            key={index}
-                            onClick={() => handleColorSelect(option)} // Pass the whole option object
-                            className="w-full h-32 rounded-2xl flex flex-col items-center justify-center border-4 border-gray-300 hover:border-blue-500 transition duration-300 transform hover:scale-105 shadow-md relative" // Removed option-button-padding
-                            style={{ backgroundColor: option.color.hex }} // Set button background to option's color
-                        >
-                            {/* Display the shape filled with the option's color */}
-                            {option.shape && ( // Use option.shape here
-                                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="w-20 h-20 mb-2"> {/* Added w-20 h-20 and mb-2 */}
-                                    <g dangerouslySetInnerHTML={{ __html: option.shape.svg(option.color.hex, getContrastStrokeColor(option.color.hex)) }} />
-                                </svg>
-                            )}
-
-                            {/* English Speaker icon - bottom right */}
-                            <div
-                                onClick={(e) => {
-                                    e.stopPropagation(); // Prevent triggering parent button's onClick
-                                    // Speak both English color and shape names
-                                    speakText(`${option.color.name} ${option.shape.name}`, 'en-US');
-                                }}
-                                className="absolute bottom-2 right-2 p-1 rounded-full bg-black bg-opacity-30 hover:bg-opacity-50 transition-opacity cursor-pointer" // Added cursor-pointer
-                                style={{ color: getContrastTextColor(option.color.hex) }} // Use option's color for contrast
-                                aria-label={`Listen to ${option.color.name} ${option.shape.name} pronunciation`}
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fillRule="evenodd" d="M9.383 3.023A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l4.707-4.707a1 1 0 012.09-.27zM14.01 7.071a.75.75 0 00-.01 1.05L15.393 10l-1.403 1.879a.75.75 0 101.06 1.06L16.45 11.01a.75.75 0 000-1.06L15.07 7.07a.75.75 0 00-1.06-.001z" clipRule="evenodd" />
-                                </svg>
-                            </div>
-
-                            {/* Chinese Speaker icon - bottom left */}
-                            <div
-                                onClick={(e) => {
-                                    e.stopPropagation(); // Prevent triggering parent button's onClick
-                                    // Speak both Chinese color and shape names
-                                    speakText(`${option.color.chinese} ${option.shape.chinese}`, 'zh-TW');
-                                }}
-                                className="absolute bottom-2 left-2 p-1 rounded-full bg-black bg-opacity-30 hover:bg-opacity-50 transition-opacity cursor-pointer" // Added cursor-pointer
-                                style={{ color: getContrastTextColor(option.color.hex) }}
-                                aria-label={`Listen to ${option.color.chinese} ${option.shape.chinese} pronunciation`}
-                            >
-                                {/* Using a different icon to distinguish Chinese pronunciation */}
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
-                                </svg>
-                            </div>
-                        </button>
-                    ))}
+                    </>
                 </div>
+            );
+        };
 
-                {feedback && (
-                    <p className={`text-4xl font-bold ${isCorrect ? 'text-green-600' : 'text-red-600'} animate-bounce`}>
-                        {feedback}
-                    </p>
-                )}
-            </div>
-
-            {/* Button to return to start screen */}
-            <button
-                onClick={resetGameToStart}
-                className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-full shadow-lg transform transition duration-300 hover:scale-105 mt-4"
-            >
-                返回主選單
-            </button>
-        </div>
-    );
-};
-
-export default App;
+        // Render the App component into the root div
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
